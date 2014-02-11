@@ -7,8 +7,12 @@ __license__ = 'GNU Affero General Public License http://www.gnu.org/licenses/agp
 import datetime
 import logging
 import subprocess
-import Queue
 import threading
+
+try:
+	import Queue
+except ImportError:
+	import queue as Queue
 
 from octoprint.settings import settings
 
@@ -254,7 +258,7 @@ class CommandTrigger(GenericEventListener):
 			try:
 				processedCommand = self._processCommand(command, payload)
 				self.executeCommand(processedCommand)
-			except KeyError, e:
+			except KeyError:
 				self._logger.warn("There was an error processing one or more placeholders in the following command: %s" % command)
 
 	def executeCommand(self, command):
@@ -316,9 +320,9 @@ class SystemCommandTrigger(CommandTrigger):
 		try:
 			self._logger.info("Executing system command: %s" % command)
 			subprocess.Popen(command, shell=True)
-		except subprocess.CalledProcessError, e:
+		except subprocess.CalledProcessError as e:
 			self._logger.warn("Command failed with return code %i: %s" % (e.returncode, e.message))
-		except Exception, ex:
+		except Exception:
 			self._logger.exception("Command failed")
 
 

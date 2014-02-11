@@ -84,10 +84,10 @@ def performSystemAction():
 				logger.info("Performing command: %s" % availableAction["command"])
 				try:
 					subprocess.check_output(availableAction["command"], shell=True)
-				except subprocess.CalledProcessError, e:
+				except subprocess.CalledProcessError as e:
 					logger.warn("Command failed with return code %i: %s" % (e.returncode, e.message))
 					return make_response(("Command failed with return code %i: %s" % (e.returncode, e.message), 500, []))
-				except Exception, ex:
+				except Exception as ex:
 					logger.exception("Command failed")
 					return make_response(("Command failed: %r" % ex, 500, []))
 	return NO_CONTENT

@@ -10,9 +10,13 @@ import glob
 import time
 import re
 import threading
-import Queue as queue
 import logging
 import serial
+
+try:
+	import Queue as queue
+except ImportError:
+	import queue
 
 from collections import deque
 
@@ -852,7 +856,7 @@ class MachineCom(object):
 					programmer.connect(p)
 					self._serial = programmer.leaveISP()
 					break
-				except ispBase.IspError as (e):
+				except ispBase.IspError as e:
 					self._log("Error while connecting to %s: %s" % (p, str(e)))
 					pass
 				except:
@@ -1291,7 +1295,7 @@ class PrintingGcodeFileInformation(PrintingFileInformation):
 				self._startTime = time.time()
 
 			return processedLine
-		except Exception as (e):
+		except Exception as e:
 			if self._filehandle is not None:
 				self._filehandle.close()
 				self._filehandle = None

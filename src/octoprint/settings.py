@@ -129,7 +129,8 @@ default_settings = {
 	},
 	"api": {
 		"enabled": False,
-		"key": ''.join('%02X' % ord(z) for z in uuid.uuid4().bytes)
+		"key": ''.join('%02X' % (ord(z) if isinstance(z, str) else z)
+                       for z in uuid.uuid4().bytes)
 	},
 	"terminalFilters": [
 		{ "name": "Suppress M105 requests/responses", "regex": "(Send: M105)|(Recv: ok T\d*:)" },
@@ -195,7 +196,7 @@ class Settings(object):
 			return
 
 		with open(self._configfile, "wb") as configFile:
-			yaml.safe_dump(self._config, configFile, default_flow_style=False, indent="    ", allow_unicode=True)
+			yaml.safe_dump(self._config, configFile, encoding="UTF-8", default_flow_style=False, indent=4, allow_unicode=True)
 			self._dirty = False
 		self.load()
 

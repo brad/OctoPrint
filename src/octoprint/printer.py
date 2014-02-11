@@ -413,7 +413,7 @@ class Printer():
 				"messageHistory": list(self._messages)
 			})
 			callback.sendHistoryData(data)
-		except Exception, err:
+		except Exception as err:
 			import sys
 			sys.stderr.write("ERROR: %s\n" % str(err))
 			pass

@@ -146,7 +146,7 @@ class Server():
 			try:
 				clazz = util.getClass(userManagerName)
 				userManager = clazz()
-			except AttributeError, e:
+			except AttributeError as e:
 				logger.exception("Could not instantiate user manager %s, will run with accessControl disabled!" % userManagerName)
 
 		app.wsgi_app = ReverseProxied(app.wsgi_app)

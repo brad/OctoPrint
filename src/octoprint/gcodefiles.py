@@ -5,13 +5,17 @@ __author__ = "Gina Häußge <osd@foosel.net>"
 __license__ = 'GNU Affero General Public License http://www.gnu.org/licenses/agpl.html'
 
 import os
-import Queue
 import threading
 import yaml
 import time
 import logging
 import octoprint.util as util
 import octoprint.util.gcodeInterpreter as gcodeInterpreter
+
+try:
+	import Queue
+except ImportError:
+	import queue as Queue
 
 from octoprint.settings import settings
 from octoprint.events import eventManager, Events
@@ -208,7 +212,7 @@ class GcodeManager:
 
 		with self._metadataFileAccessMutex:
 			with open(self._metadataTempFile, "wb") as f:
-				yaml.safe_dump(self._metadata, f, default_flow_style=False, indent="    ", allow_unicode=True)
+				yaml.safe_dump(self._metadata, f, encoding="UTF-8", default_flow_style=False, indent=4, allow_unicode=True)
 				self._metadataDirty = False
 			util.safeRename(self._metadataTempFile, self._metadataFile)
 

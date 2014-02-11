@@ -13,7 +13,7 @@ import fnmatch
 import datetime
 import sys
 
-import octoprint.util as util
+from octoprint import util as util
 
 from octoprint.settings import settings
 from octoprint.events import eventManager, Events
@@ -259,7 +259,7 @@ class Timelapse(object):
 		try:
 			subprocess.check_call(command)
 			eventManager().fire(Events.MOVIE_DONE, {"gcode": self._gcodeFile, "movie": output, "movie_basename": os.path.basename(output)})
-		except subprocess.CalledProcessError as (e):
+		except subprocess.CalledProcessError as e:
 			self._logger.warn("Could not render movie, got return code %r" % e.returncode)
 			eventManager().fire(Events.MOVIE_FAILED, {"gcode": self._gcodeFile, "movie": output, "movie_basename": os.path.basename(output), "returncode": e.returncode})
 

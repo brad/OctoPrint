@@ -16,7 +16,8 @@ class UserManager(object):
 
 	@staticmethod
 	def createPasswordHash(password):
-		return hashlib.sha512(password + "mvBUTvwzBzD3yPwvnJ4E4tXNf3CGJvvW").hexdigest()
+		salt = "mvBUTvwzBzD3yPwvnJ4E4tXNf3CGJvvW".encode('utf-8')
+		return hashlib.sha512(password.encode('utf-8') + salt).hexdigest()
 
 	def addUser(self, username, password, active, roles):
 		pass
@@ -93,7 +94,7 @@ class FilebasedUserManager(UserManager):
 			}
 
 		with open(self._userfile, "wb") as f:
-			yaml.safe_dump(data, f, default_flow_style=False, indent="    ", allow_unicode=True)
+			yaml.safe_dump(data, f, encoding="UTF-8", default_flow_style=False, indent=4, allow_unicode=True)
 			self._dirty = False
 		self._load()
 
@@ -201,7 +202,7 @@ class FilebasedUserManager(UserManager):
 			return None
 
 	def getAllUsers(self):
-		return map(lambda x: x.asDict(), self._users.values())
+		return [x.asDict() for x in self._users.values()]
 
 	def hasBeenCustomized(self):
 		return self._customized
