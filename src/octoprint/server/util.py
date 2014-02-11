@@ -194,7 +194,7 @@ class PrinterStateConnection(SockJSConnection):
 		self.sendEvent(event, payload)
 
 	def _emit(self, type, payload):
-		self.send({type: payload})
+		self.send(str({type: payload}))
 
 
 #~~ customized large response handler
