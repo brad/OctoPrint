@@ -222,7 +222,12 @@ class gcode(object):
 		self.totalMoveTimeMinute = totalMoveTimeMinute
 
 	def _parseCuraProfileString(self, comment):
-		return {key: value for (key, value) in map(lambda x: x.split("=", 1), zlib.decompress(base64.b64decode(comment[len("CURA_PROFILE_STRING:"):])).split("\b"))}
+		profile = {}
+		decoded = base64.b64decode(comment[len("CURA_PROFILE_STRING:"):])
+		for keyval in zlib.decompress(decoded).split("\b"):
+			key, val = keyval.split("=", 1)
+			profile.update({key: val})
+		return profile
 
 
 def getCodeInt(line, code):
