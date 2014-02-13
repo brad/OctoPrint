@@ -41,7 +41,7 @@ class FileManipulationTestCase(unittest.TestCase):
 		logging.info("RESULT:%s" % str(result))
 
 		self.assertFalse(process.called)
-		self.assertIsNone(result)
+		assert result is None
 		self.assertTrue(done)
 
 	@patch('octoprint.settings.Settings.getBoolean')
