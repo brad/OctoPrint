@@ -10,9 +10,9 @@ import threading
 import yaml
 import time
 import logging
-import octoprint.util as util
-import octoprint.util.gcodeInterpreter as gcodeInterpreter
 
+from octoprint import util
+from octoprint.util import gcodeInterpreter
 from octoprint.settings import settings
 from octoprint.events import eventManager, Events
 from octoprint.filemanager.destinations import FileDestinations
