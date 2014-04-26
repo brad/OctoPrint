@@ -1,7 +1,11 @@
+# coding=utf-8
+__author__ = "Gina Häußge <osd@foosel.net>"
+__license__ = 'GNU Affero General Public License http://www.gnu.org/licenses/agpl.html'
+
 from flask.ext.principal import identity_changed, Identity
 from tornado.web import StaticFileHandler, HTTPError
 from flask import url_for, make_response, request, current_app
-from flask.ext.login import login_required, login_user
+from flask.ext.login import login_required, login_user, current_user
 from werkzeug.utils import redirect
 from sockjs.tornado import SockJSConnection
 
@@ -20,6 +24,7 @@ import octoprint.timelapse
 import octoprint.server
 from octoprint.users import ApiUser
 from octoprint.events import Events
+
 
 def restricted_access(func, apiEnabled=True):
 	"""
@@ -45,9 +50,9 @@ def restricted_access(func, apiEnabled=True):
 		if settings().getBoolean(["server", "firstRun"]) and (octoprint.server.userManager is None or not octoprint.server.userManager.hasBeenCustomized()):
 			return make_response("OctoPrint isn't setup yet", 403)
 
-		# if API is globally enabled, enabled for this request and an api key is provided, try to use that
-		apikey = _getApiKey(request)
-		if settings().get(["api", "enabled"]) and apiEnabled and apikey is not None:
+		# if API is globally enabled, enabled for this request and an api key is provided that is not the current UI API key, try to use that
+		apikey = getApiKey(request)
+		if settings().get(["api", "enabled"]) and apiEnabled and apikey is not None and apikey != octoprint.server.UI_API_KEY:
 			if apikey == settings().get(["api", "key"]):
 				# master key was used
 				user = ApiUser()
@@ -56,7 +61,7 @@ def restricted_access(func, apiEnabled=True):
 				user = octoprint.server.userManager.findUser(apikey=apikey)
 
 			if user is None:
-				make_response("Invalid API key", 401)
+				return make_response("Invalid API key", 401)
 			if login_user(user, remember=False):
 				identity_changed.send(current_app._get_current_object(), identity=Identity(user.get_id()))
 				return func(*args, **kwargs)
@@ -71,7 +76,7 @@ def api_access(func):
 	def decorated_view(*args, **kwargs):
 		if not settings().get(["api", "enabled"]):
 			make_response("API disabled", 401)
-		apikey = _getApiKey(request)
+		apikey = getApiKey(request)
 		if apikey is None:
 			make_response("No API key provided", 401)
 		if apikey != settings().get(["api", "key"]):
@@ -80,11 +85,32 @@ def api_access(func):
 	return decorated_view
 
 
-def _getApiKey(request):
-	if "apikey" in request.values:
+def getUserForApiKey(apikey):
+	if settings().get(["api", "enabled"]) and apikey is not None:
+		if apikey == settings().get(["api", "key"]):
+			# master key was used
+			return ApiUser()
+		else:
+			# user key might have been used
+			return octoprint.server.userManager.findUser(apikey=apikey)
+	else:
+		return None
+
+
+def getApiKey(request):
+	# Check Flask GET/POST arguments
+	if hasattr(request, "values") and "apikey" in request.values:
 		return request.values["apikey"]
+
+	# Check Tornado GET/POST arguments
+	if hasattr(request, "arguments") and "apikey" in request.arguments \
+		and len(request.arguments["apikey"]) > 0 and len(request.arguments["apikey"].strip()) > 0:
+		return request.arguments["apikey"]
+
+	# Check Tornado and Flask headers
 	if "X-Api-Key" in request.headers.keys():
 		return request.headers.get("X-Api-Key")
+
 	return None
 
 
@@ -122,6 +148,10 @@ class PrinterStateConnection(SockJSConnection):
 	def on_open(self, info):
 		remoteAddress = self._getRemoteAddress(info)
 		self._logger.info("New connection from client: %s" % remoteAddress)
+
+		# connected => update the API key, might be necessary if the client was left open while the server restarted
+		self._emit("connected", {"apikey": octoprint.server.UI_API_KEY})
+
 		self._printer.registerCallback(self)
 		self._gcodeManager.registerCallback(self)
 		octoprint.timelapse.registerCallback(self)
@@ -204,11 +234,15 @@ class LargeResponseHandler(StaticFileHandler):
 
 	CHUNK_SIZE = 16 * 1024
 
-	def initialize(self, path, default_filename=None, as_attachment=False):
+	def initialize(self, path, default_filename=None, as_attachment=False, access_validation=None):
 		StaticFileHandler.initialize(self, path, default_filename)
 		self._as_attachment = as_attachment
+		self._access_validation = access_validation
 
 	def get(self, path, include_body=True):
+		if self._access_validation is not None:
+			self._access_validation(self.request)
+
 		path = self.parse_url_path(path)
 		abspath = os.path.abspath(os.path.join(self.root, path))
 		# os.path.abspath strips a trailing /
@@ -273,6 +307,29 @@ class LargeResponseHandler(StaticFileHandler):
 			self.set_header("Content-Disposition", "attachment")
 
 
+#~~ admin access validator for use with tornado
+
+
+def admin_validator(request):
+	"""
+	Validates that the given request is made by an admin user, identified either by API key or existing Flask
+	session.
+
+	Must be executed in an existing Flask request context!
+
+	:param request: The Flask request object
+	"""
+
+	apikey = getApiKey(request)
+	if settings().get(["api", "enabled"]) and apikey is not None:
+		user = getUserForApiKey(apikey)
+	else:
+		user = current_user
+
+	if user is None or not user.is_authenticated() or not user.is_admin():
+		raise HTTPError(403)
+
+
 #~~ reverse proxy compatible wsgi middleware
 
 
@@ -332,8 +389,4 @@ def redirectToTornado(request, target):
 		fragment = requestUrl[requestUrl.rfind("?"):]
 		redirectUrl += fragment
 	return redirect(redirectUrl)
-
-
-def urlForDownload(origin, filename):
-	return url_for("index", _external=True) + "downloads/files/" + origin + "/" + filename
 

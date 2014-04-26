@@ -1,7 +1,11 @@
 # coding=utf-8
+import uuid
+
 __author__ = "Gina Häußge <osd@foosel.net>"
 __license__ = 'GNU Affero General Public License http://www.gnu.org/licenses/agpl.html'
 
+import flask
+import tornado.wsgi
 from sockjs.tornado import SockJSRouter
 from flask import Flask, render_template, send_from_directory, make_response
 from flask.ext.login import LoginManager
@@ -27,8 +31,8 @@ principals = Principal(app)
 admin_permission = Permission(RoleNeed("admin"))
 user_permission = Permission(RoleNeed("user"))
 
-
-from octoprint.server.util import LargeResponseHandler, ReverseProxied, restricted_access, PrinterStateConnection
+# only import the octoprint stuff down here, as it might depend on things defined above to be initialized already
+from octoprint.server.util import LargeResponseHandler, ReverseProxied, restricted_access, PrinterStateConnection, admin_validator
 from octoprint.printer import Printer, getConnectionOptions
 from octoprint.settings import settings
 import octoprint.gcodefiles as gcodefiles
@@ -36,6 +40,9 @@ import octoprint.util as util
 import octoprint.users as users
 import octoprint.events as events
 import octoprint.timelapse
+
+
+UI_API_KEY = ''.join('%02X' % ord(z) for z in uuid.uuid4().bytes)
 
 
 @app.route("/")
@@ -62,7 +69,8 @@ def index():
 		gitCommit=commit,
 		stylesheet=settings().get(["devel", "stylesheet"]),
 		gcodeMobileThreshold=settings().get(["gcodeViewer", "mobileSizeThreshold"]),
-		gcodeThreshold=settings().get(["gcodeViewer", "sizeThreshold"])
+		gcodeThreshold=settings().get(["gcodeViewer", "sizeThreshold"]),
+		uiApiKey=UI_API_KEY
 	)
 
 
@@ -94,13 +102,14 @@ def load_user(id):
 
 
 class Server():
-	def __init__(self, configfile=None, basedir=None, host="0.0.0.0", port=5000, debug=False, allowRoot=False):
+	def __init__(self, configfile=None, basedir=None, host="0.0.0.0", port=5000, debug=False, allowRoot=False, logConf=None):
 		self._configfile = configfile
 		self._basedir = basedir
 		self._host = host
 		self._port = port
 		self._debug = debug
 		self._allowRoot = allowRoot
+		self._logConf = logConf
 
 		  
 	def run(self):
@@ -125,7 +134,7 @@ class Server():
 		self._initSettings(self._configfile, self._basedir)
 
 		# then initialize logging
-		self._initLogging(self._debug)
+		self._initLogging(self._debug, self._logConf)
 		logger = logging.getLogger(__name__)
 
 		eventManager = events.eventManager()
@@ -174,9 +183,23 @@ class Server():
 
 		self._router = SockJSRouter(self._createSocketConnection, "/sockjs")
 
+		def admin_access_validation(request):
+			"""
+			Creates a custom wsgi and Flask request context in order to be able to process user information
+			stored in the current session.
+
+			:param request: The Tornado request for which to create the environment and context
+			"""
+			wsgi_environ = tornado.wsgi.WSGIContainer.environ(request)
+			with app.request_context(wsgi_environ):
+				app.session_interface.open_session(app, flask.request)
+				loginManager.reload_user()
+				admin_validator(flask.request)
+
 		self._tornado_app = Application(self._router.urls + [
 			(r"/downloads/timelapse/([^/]*\.mpg)", LargeResponseHandler, {"path": settings().getBaseFolder("timelapse"), "as_attachment": True}),
 			(r"/downloads/files/local/([^/]*\.(gco|gcode))", LargeResponseHandler, {"path": settings().getBaseFolder("uploads"), "as_attachment": True}),
+			(r"/downloads/logs/([^/]*)", LargeResponseHandler, {"path": settings().getBaseFolder("logs"), "as_attachment": True, "access_validation": admin_access_validation}),
 			(r".*", FallbackHandler, {"fallback": WSGIContainer(app.wsgi_app)})
 		])
 		self._server = HTTPServer(self._tornado_app)
@@ -190,6 +213,8 @@ class Server():
 				printer.connect(port, baudrate)
 		try:
 			IOLoop.instance().start()
+		except KeyboardInterrupt:
+			logger.info("Goodbye!")
 		except:
 			logger.fatal("Now that is embarrassing... Something really really went wrong here. Please report this including the stacktrace below in OctoPrint's bugtracker. Thanks!")
 			logger.exception("Stacktrace follows:")
@@ -205,8 +230,8 @@ class Server():
 	def _initSettings(self, configfile, basedir):
 		settings(init=True, basedir=basedir, configfile=configfile)
 
-	def _initLogging(self, debug):
-		config = {
+	def _initLogging(self, debug, logConf=None):
+		defaultConfig = {
 			"version": 1,
 			"formatters": {
 				"simple": {
@@ -237,12 +262,6 @@ class Server():
 				}
 			},
 			"loggers": {
-				#"octoprint.timelapse": {
-				#	"level": "DEBUG"
-				#},
-				#"octoprint.events": {
-				#	"level": "DEBUG"
-				#},
 				"SERIAL": {
 					"level": "CRITICAL",
 					"handlers": ["serialFile"],
@@ -256,8 +275,18 @@ class Server():
 		}
 
 		if debug:
-			config["root"]["level"] = "DEBUG"
+			defaultConfig["root"]["level"] = "DEBUG"
 
+		if logConf is None:
+			logConf = os.path.join(settings().settings_dir, "logging.yaml")
+
+		configFromFile = {}
+		if os.path.exists(logConf) and os.path.isfile(logConf):
+			import yaml
+			with open(logConf, "r") as f:
+				configFromFile = yaml.safe_load(f)
+
+		config = util.dict_merge(defaultConfig, configFromFile)
 		logging.config.dictConfig(config)
 
 		if settings().getBoolean(["serial", "log"]):

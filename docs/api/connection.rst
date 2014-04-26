@@ -16,16 +16,13 @@ Get connection settings
    Retrieve the current connection settings, including information regarding the available baudrates and
    serial ports and the current connection state.
 
-   **Example Request**
+   **Example**
 
    .. sourcecode:: http
 
-      GET /api/control/connection HTTP/1.1
+      GET /api/connection HTTP/1.1
       Host: example.com
-      Content-Type: application/json
       X-Api-Key: abcdef...
-
-   **Example Response**
 
    .. sourcecode:: http
 
@@ -77,7 +74,7 @@ Issue a connection command
 
    .. sourcecode:: http
 
-      POST /api/control/connection HTTP/1.1
+      POST /api/connection HTTP/1.1
       Host: example.com
       Content-Type: application/json
       X-Api-Key: abcdef...
@@ -90,11 +87,15 @@ Issue a connection command
         "autoconnect": true
       }
 
+   .. sourcecode:: http
+
+      HTTP/1.1 204 No Content
+
    **Example Disconnect Request**
 
    .. sourcecode:: http
 
-      POST /api/control/connection HTTP/1.1
+      POST /api/connection HTTP/1.1
       Host: example.com
       Content-Type: application/json
       X-Api-Key: abcdef...
@@ -102,6 +103,10 @@ Issue a connection command
       {
         "command": "disconnect"
       }
+
+   .. sourcecode:: http
+
+      HTTP/1.1 204 No Content
 
    :json string command:      The command to issue, either ``connect`` or ``disconnect``
    :json string port:         ``connect`` command: The port to connect to. If left out either the existing ``portPreference``
@@ -114,6 +119,6 @@ Issue a connection command
                               Defaults to ``false`` if not set.
    :json boolean autoconnect: ``connect`` command: Whether to attempt to automatically connect to the printer on server
                               startup. If not set no changes will be made to the current setting.
-   :statuscode 200:           No error
+   :statuscode 204:           No error
    :statuscode 400:           If the selected `port` or `baudrate` for a ``connect`` command are not part of the available
                               options.

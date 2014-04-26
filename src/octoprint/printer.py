@@ -37,6 +37,7 @@ class Printer():
 		self._gcodeManager.registerCallback(self)
 
 		# state
+		# TODO do we really need to hold the temperature here?
 		self._temp = None
 		self._bedTemp = None
 		self._targetTemp = None
@@ -305,7 +306,7 @@ class Printer():
 
 		# mark print as failure
 		if self._selectedFile is not None:
-			self._gcodeManager.printFailed(self._selectedFile["filename"])
+			self._gcodeManager.printFailed(self._selectedFile["filename"], self._comm.getPrintTime())
 			payload = {
 				"file": self._selectedFile["filename"],
 				"origin": FileDestinations.LOCAL
@@ -355,10 +356,11 @@ class Printer():
 				"actual": temp[tool][0],
 				"target": temp[tool][1]
 			}
-		data["bed"] = {
-			"actual": bedTemp[0],
-			"target": bedTemp[1]
-		}
+		if bedTemp is not None and isinstance(bedTemp, tuple):
+			data["bed"] = {
+				"actual": bedTemp[0],
+				"target": bedTemp[1]
+			}
 
 		self._temps.append(data)
 
@@ -453,9 +455,9 @@ class Printer():
 		if self._comm is not None and oldState == self._comm.STATE_PRINTING:
 			if self._selectedFile is not None:
 				if state == self._comm.STATE_OPERATIONAL:
-					self._gcodeManager.printSucceeded(self._selectedFile["filename"])
+					self._gcodeManager.printSucceeded(self._selectedFile["filename"], self._comm.getPrintTime())
 				elif state == self._comm.STATE_CLOSED or state == self._comm.STATE_ERROR or state == self._comm.STATE_CLOSED_WITH_ERROR:
-					self._gcodeManager.printFailed(self._selectedFile["filename"])
+					self._gcodeManager.printFailed(self._selectedFile["filename"], self._comm.getPrintTime())
 			self._gcodeManager.resumeAnalysis() # printing done, put those cpu cycles to good use
 		elif self._comm is not None and state == self._comm.STATE_PRINTING:
 			self._gcodeManager.pauseAnalysis() # do not analyse gcode while printing
@@ -605,17 +607,19 @@ class Printer():
 			bedTempOffset = None
 
 		result = {}
-		for tool in self._temp.keys():
-			result["tool%d" % tool] = {
-				"actual": self._temp[tool][0],
-				"target": self._temp[tool][1],
-				"offset": tempOffset[tool] if tool in tempOffset.keys() and tempOffset[tool] is not None else 0
+		if self._temp is not None:
+			for tool in self._temp.keys():
+				result["tool%d" % tool] = {
+					"actual": self._temp[tool][0],
+					"target": self._temp[tool][1],
+					"offset": tempOffset[tool] if tool in tempOffset.keys() and tempOffset[tool] is not None else 0
+					}
+		if self._bedTemp is not None:
+			result["bed"] = {
+				"actual": self._bedTemp[0],
+				"target": self._bedTemp[1],
+				"offset": bedTempOffset
 			}
-		result["bed"] = {
-			"actual": self._bedTemp[0],
-			"target": self._bedTemp[1],
-			"offset": bedTempOffset
-		}
 
 		return result
 
